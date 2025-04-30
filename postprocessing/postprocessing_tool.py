@@ -179,7 +179,12 @@ def step4_skeleton_postprocess(skeleton, ann_img, min_length_threshold, branch_p
     segments, _ = split_lines_from_skeleton(skeleton, min_length_threshold, branch_proximity)
     postprocessed = np.zeros_like(ann_img, dtype=np.uint8)
     for cnt in segments:
-        cv2.drawContours(postprocessed, [cnt], -1, 255, thickness=2)
+        cv2.drawContours(postprocessed, [cnt], -1, 255, thickness=1)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (12, 12))
+    
+    postprocessed = cv2.dilate(postprocessed, kernel, iterations=1)
+
     return postprocessed
 
 

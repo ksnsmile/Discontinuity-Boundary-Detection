@@ -97,6 +97,62 @@ def generate_holes_grid(image_shape, fragile_mask, hole_min_distance, hole_grids
             candidate_holes.append(candidate)
     return candidate_holes
 
+#취약영역 고려하지 않은 것 
+def generate_holes_grid_2(image_shape, hole_min_distance, hole_gridsearch_distance,
+                        noise_std):
+    """
+    Generate hole positions via grid sampling.
+    """
+    h, w = image_shape
+    grid_spacing = hole_gridsearch_distance
+    x_coords = np.arange(grid_spacing / 2, w, grid_spacing)
+    y_coords = np.arange(grid_spacing / 2, h, grid_spacing)
+    
+    just_holes = []
+    
+    for y in y_coords:
+        for x in x_coords:
+            perturbed_x = x + np.random.normal(0, noise_std)
+            perturbed_y = y + np.random.normal(0, noise_std)
+            candidate = (int(round(perturbed_x)), int(round(perturbed_y)))
+            if candidate[0] < 0 or candidate[0] >= w or candidate[1] < 0 or candidate[1] >= h:
+                continue
+            if any(np.linalg.norm(np.array(candidate) - np.array(existing)) < hole_min_distance
+                   for existing in just_holes):
+                continue
+            just_holes.append(candidate)
+    return just_holes
+
+#노이즈 없는 격자 생성
+def generate_holes_grid_3(image_shape, fragile_mask, hole_min_distance, hole_gridsearch_distance,
+                        fragile_clearance, noise_std, safety_factor=3):
+    """
+    Generate hole positions via grid sampling.
+    """
+    h, w = image_shape
+    grid_spacing = hole_gridsearch_distance
+    x_coords = np.arange(grid_spacing / 2, w, grid_spacing)
+    y_coords = np.arange(grid_spacing / 2, h, grid_spacing)
+    
+    candidate_holes = []
+    inverted_mask = 255 - fragile_mask
+    dist_transform = cv2.distanceTransform(inverted_mask, cv2.DIST_L2, 5)
+    clearance_mask = (dist_transform < fragile_clearance).astype(np.uint8) * 255
+    
+    for y in y_coords:
+        for x in x_coords:
+            perturbed_x = x 
+            perturbed_y = y 
+            candidate = (int(round(perturbed_x)), int(round(perturbed_y)))
+            if candidate[0] < 0 or candidate[0] >= w or candidate[1] < 0 or candidate[1] >= h:
+                continue
+            if clearance_mask[candidate[1], candidate[0]] != 0:
+                continue
+            if any(np.linalg.norm(np.array(candidate) - np.array(existing)) < hole_min_distance
+                   for existing in candidate_holes):
+                continue
+            candidate_holes.append(candidate)
+    return candidate_holes
 
 def draw_dashed_circle(img, center, radius, color, thickness=1, dash_length=5, gap_length=3):
     """
@@ -113,7 +169,7 @@ def draw_dashed_circle(img, center, radius, color, thickness=1, dash_length=5, g
                int(center[1] + radius * np.sin(theta_end)))
         cv2.line(img, pt1, pt2, color, thickness)
 
-
+# 취약영역 반영한 천공 위치 후보군군
 def save_csv(holes, filename):
     """
     Save the hole coordinates to a CSV file.
@@ -124,6 +180,27 @@ def save_csv(holes, filename):
         for (x, y) in holes:
             writer.writerow([x, y])
 
+# 취약영역 반영하지 않은 천고 위치 후보군
+def save_csv_2(holes, filename):
+    """
+    Save the hole coordinates to a CSV file.
+    """
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['x', 'y'])
+        for (x, y) in holes:
+            writer.writerow([x, y])
+
+# 노이즈 제거거
+def save_csv_3(holes, filename):
+    """
+    Save the hole coordinates to a CSV file.
+    """
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['x', 'y'])
+        for (x, y) in holes:
+            writer.writerow([x, y])
 
 # ======================== Step Functions & Their Visualizations ========================
 
@@ -216,6 +293,26 @@ def step6_generate_holes(ann_img, postprocessed, hole_min_distance, hole_gridsea
     holes = [hole for hole in holes if roi_mask[hole[1], hole[0]] == 255]
     return holes
 
+# 취약영역 천공 생성
+def step6_generate_holes_2(ann_img, hole_min_distance, hole_gridsearch_distance,
+                         noise_std):
+    """Generate candidate hole centers via grid sampling."""
+    holes = generate_holes_grid_2(ann_img.shape, hole_min_distance,
+                                hole_gridsearch_distance, noise_std)
+    
+    holes = [hole for hole in holes ]
+    return holes
+
+
+# 노이즈 없는 것 
+def step6_generate_holes_3(ann_img, postprocessed, hole_min_distance, hole_gridsearch_distance,
+                         fragile_clearance, noise_std, safety_factor,thresh_roi):
+    """Generate candidate hole centers via grid sampling."""
+    holes = generate_holes_grid_3(ann_img.shape, postprocessed, hole_min_distance,
+                                hole_gridsearch_distance, fragile_clearance, noise_std, safety_factor)
+    roi_mask = np.where(ann_img >= thresh_roi, 255, 0).astype(np.uint8)
+    holes = [hole for hole in holes if roi_mask[hole[1], hole[0]] == 255]
+    return holes
 
 def visualize_step6(ann_img, holes, hole_min_distance, filename):
     """
